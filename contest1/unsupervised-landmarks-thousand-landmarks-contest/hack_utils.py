@@ -1,6 +1,6 @@
 import os
-
 import cv2
+import time
 import numpy as np
 import pandas as pd
 import torch
@@ -155,3 +155,13 @@ def create_submission(path_to_data, test_predictions, path_to_submission_file):
         points_for_image = test_predictions[i]
         needed_points = points_for_image[point_index_list].astype(np.int)
         wf.write(file_name + ',' + ','.join(map(str, needed_points.reshape(2 * len(point_index_list)))) + '\n')
+        
+        
+class Timer:
+    def __enter__(self):
+        self.start = time.perf_counter()
+        return self
+
+    def __exit__(self, *args):
+        self.end = time.perf_counter()
+        self.interval = self.end - self.start
