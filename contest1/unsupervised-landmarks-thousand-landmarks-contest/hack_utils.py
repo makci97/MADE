@@ -1,6 +1,7 @@
 import os
-import cv2
 import time
+import tqdm
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -81,27 +82,34 @@ class ThousandLandmarksDataset(data.Dataset):
             else os.path.join(root, "test_points.csv")
         images_root = os.path.join(root, "images")
 
-        df = pd.read_csv(landmark_file_name, delimiter='\t')
-
-        self.landmarks = []
         self.image_names = []
+        self.landmarks = []
 
-        split_idxs = {"train": range(0, int(TRAIN_SIZE * len(df))),
-                      "val": range(int(TRAIN_SIZE * len(df)), len(df)),
-                      "test": range(len(df))}
-        idxs = split_idxs[split]
+        with open(landmark_file_name, "rt") as fp:
+            num_lines = sum(1 for line in fp)
+        num_lines -= 1  # header
+
+        with open(landmark_file_name, "rt") as fp:
+            for i, line in tqdm.tqdm(enumerate(fp)):
+                if i == 0:
+                    continue  # skip header
+                if split == "train" and i == int(TRAIN_SIZE * num_lines):
+                    break  # reached end of train part of data
+                elif split == "val" and i < int(TRAIN_SIZE * num_lines):
+                    continue  # has not reached start of val part of data
+                elements = line.strip().split("\t")
+                image_name = os.path.join(images_root, elements[0])
+                self.image_names.append(image_name)
+
+                if split in ("train", "val"):
+                    landmarks = list(map(np.int16, elements[1:]))
+                    landmarks = np.array(landmarks, dtype=np.int16).reshape((len(landmarks) // 2, 2))
+                    self.landmarks.append(landmarks)
 
         if split in ("train", "val"):
-            for row in df._values[idxs]:
-                self.image_names.append(os.path.join(images_root, row[0]))
-                self.landmarks.append(row[1:].astype('int32').reshape((len(row) // 2, 2)))
             self.landmarks = torch.as_tensor(self.landmarks)
-        elif split == 'test':
-            for row in df._values[idxs]:
-                self.image_names.append(os.path.join(images_root, row[0]))
-            self.landmarks = None
         else:
-            raise NotImplementedError(split)
+            self.landmarks = None
 
         self.transforms = transforms
 
