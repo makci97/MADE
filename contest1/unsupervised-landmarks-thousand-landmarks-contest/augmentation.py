@@ -4,7 +4,7 @@ import torch
 import random
 import numpy as np
 
-from typing import List
+from typing import List, Dict, Any
 
 sys.path.append('./')
 from hack_utils import NUM_PTS
@@ -299,4 +299,12 @@ def get_i_from_dict(i: int, d: dict):
 def batch2samples(batch, size):
     for i in range(size):
         yield get_i_from_dict(i, batch)
+
+        
+def constant_augmenter(augmenter: Augmenter, const_params_dict: Dict[str, Any]) -> Augmenter:
+    def _get_params(sample):
+        return const_params_dict.copy()
+    augmenter._get_params = _get_params
+    
+    return augmenter
         

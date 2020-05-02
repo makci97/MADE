@@ -176,10 +176,11 @@ class Timer:
         
 
 class DebugThousandLandmarksDataset(data.Dataset):
-    def __init__(self, root, transforms, n_samples=100):
+    def __init__(self, root, transforms, n_samples=100, split="train"):
         super(DebugThousandLandmarksDataset, self).__init__()
         self.root = root
-        landmark_file_name = os.path.join(root, 'landmarks.csv')
+        landmark_file_name = os.path.join(root, 'landmarks.csv') if split is not "test" \
+            else os.path.join(root, "test_points.csv")
         images_root = os.path.join(root, "images")
 
         self.image_names = []
@@ -196,11 +197,16 @@ class DebugThousandLandmarksDataset(data.Dataset):
                 image_name = os.path.join(images_root, elements[0])
                 self.image_names.append(image_name)
                 
-                landmarks = list(map(np.int16, elements[1:]))
-                landmarks = np.array(landmarks, dtype=np.int16).reshape((len(landmarks) // 2, 2))
-                self.landmarks.append(landmarks)
+                if split in ("train", "val"):
+                    landmarks = list(map(np.int16, elements[1:]))
+                    landmarks = np.array(landmarks, dtype=np.int16).reshape((len(landmarks) // 2, 2))
+                    self.landmarks.append(landmarks)
 
-        self.landmarks = torch.as_tensor(self.landmarks)
+        if split in ("train", "val"):
+            self.landmarks = torch.as_tensor(self.landmarks)
+        else:
+            self.landmarks = None
+
         self.transforms = transforms
 
     def __getitem__(self, idx):
