@@ -169,7 +169,6 @@ class CropAugmenter(Augmenter):
 
         image = np.array(sample[self.elem_name])
         h, w, c = image.shape
-        
         image = cv2.resize(image[
                 params['y_offset']:params['y_offset'] + params['new_h'], 
                 params['x_offset']:params['x_offset'] + params['new_w']
@@ -190,11 +189,12 @@ class CropAugmenter(Augmenter):
     def inv(self, sample):
         params = sample['params']
         
-        image = np.array(sample[self.elem_name])
+        image = np.array(sample[self.elem_name]).transpose((1, 2, 0))
         h, w, c = image.shape
         
         small_image = cv2.resize(image, (params['new_w'], params['new_h']))
         inv_image = np.full((h, w, c), 128, dtype=np.uint8)
+        
         inv_image[
             params['y_offset']:params['y_offset'] + params['new_h'], 
             params['x_offset']:params['x_offset'] + params['new_w'],
