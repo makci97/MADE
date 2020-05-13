@@ -1,4 +1,4 @@
-```python hack_train.py --name "baseline" --data "PATH_TO_DATA" [--gpu]```
+Для сабмита запустить `train_model_clean.ipynb`
 
 # Что было сделано
 
