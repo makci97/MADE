@@ -45,6 +45,7 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
         net.train()
         if scheduler is not None:
             scheduler.step(epoch)
+        writer.add_scalar('detection/lr/epoch', optimizer.state_dict()['param_groups'][0]['lr'], epoch)
 
         epoch_loss = 0.
         tqdm_iter = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))
@@ -64,6 +65,8 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             writer.add_scalar('detection/train/batch/loss', loss.item(), i + epoch * num_batches)
             writer.add_scalar('detection/train/batch/bce', mean_bce[-1], i + epoch * num_batches)
             writer.add_scalar('detection/train/batch/dice', mean_dice[-1], i + epoch * num_batches)
+
+            writer.add_scalar('detection/lr/batch', optimizer.state_dict()['param_groups'][0]['lr'], i + epoch * num_batches)
 
             optimizer.zero_grad()
             loss.backward()
