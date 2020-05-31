@@ -11,6 +11,7 @@ from dataset import DetectionDataset
 from unet import UNet
 from torch import optim
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from transform import Compose, Resize, Crop, Pad, Flip
 # the proper way to do this is relative import, one more nested package and main.py outside the package
 # will sort this out
@@ -18,23 +19,26 @@ sys.path.insert(0, os.path.abspath((os.path.dirname(__file__)) + '/../'))
 from utils import get_logger, dice_coeff, dice_loss
 
 
-
 def eval_net(net, dataset, device):
     net.eval()
-    tot = 0.
+    bce_tot, dice_tot = 0., 0.
     with torch.no_grad():
-        for i, b in tqdm.tqdm(enumerate(dataset), total=len(dataset)):
-            imgs, true_masks = b
+        for i, batch in tqdm.tqdm(enumerate(dataset), total=len(dataset)):
+            imgs, true_masks = batch
             masks_pred = net(imgs.to(device)).squeeze(1)  # (b, 1, h, w) -> (b, h, w)
             masks_pred = (F.sigmoid(masks_pred) > 0.5).float()
-            tot += dice_coeff(masks_pred.cpu(), true_masks).item()
-    return tot / len(dataset)
+
+            bce_val, dice_val = criterion(masks_pred.cpu().view(-1), true_masks.view(-1))
+            bce_tot += bce_val.item()
+            dice_tot += dice_val.item()
+
+    return bce_tot / len(dataset), dice_tot / len(dataset)
 
 
-def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader, logger, args=None, device=None):
+def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader, logger, writer, args=None, device=None):
     num_batches = len(train_dataloader)
 
-    best_model_info = {'epoch': -1, 'val_dice': 0., 'train_dice': 0., 'train_loss': 0.}
+    best_model_info = {'epoch': -1, 'val_bce': np.inf, 'val_dice': 0., 'train_dice': 0., 'train_loss': 0.}
 
     for epoch in range(args.epochs):
         logger.info('Starting epoch {}/{}.'.format(epoch + 1, args.epochs))
@@ -51,31 +55,48 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             masks_probs = F.sigmoid(masks_pred)
 
             bce_val, dice_val = criterion(masks_probs.cpu().view(-1), true_masks.view(-1))
-            loss = bce_val + dice_val
+            loss = args.weight_bce * bce_val + (1. - args.weight_bce) * dice_val
             
             mean_bce.append(bce_val.item())
             mean_dice.append(dice_val.item())
             epoch_loss += loss.item()
             tqdm_iter.set_description('mean loss: {:.4f}'.format(epoch_loss / (i + 1)))
+            writer.add_scalar('detection/train/batch/loss', loss.item(), i + epoch * num_batches)
+            writer.add_scalar('detection/train/batch/bce', mean_bce[-1], i + epoch * num_batches)
+            writer.add_scalar('detection/train/batch/dice', mean_dice[-1], i + epoch * num_batches)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        logger.info('Epoch finished! Loss: {:.5f} ({:.5f} | {:.5f})'.format(epoch_loss / num_batches,
-                                                                            np.mean(mean_bce), np.mean(mean_dice)))
+        logger.info('Epoch finished! Loss: {:.5f} ({:.5f} | {:.5f})'.format(
+            epoch_loss / num_batches,
+            np.mean(mean_bce),
+            np.mean(mean_dice),
+        ))
+        writer.add_scalar('detection/epoch/loss/train', epoch_loss / num_batches, epoch)
+        writer.add_scalar('detection/epoch/bce/train', np.mean(mean_bce), epoch)
+        writer.add_scalar('detection/epoch/dice/train', np.mean(mean_dice), epoch)
 
-        val_dice = eval_net(net, val_dataloader, device=device)
+        val_bce, val_dice = eval_net(net, val_dataloader, device=device)
         if val_dice > best_model_info['val_dice']:
+            best_model_info['val_bce'] = val_bce
             best_model_info['val_dice'] = val_dice
             best_model_info['train_loss'] = epoch_loss / num_batches
             best_model_info['epoch'] = epoch
             torch.save(net.state_dict(), os.path.join(args.output_dir, 'CP-best.pth'))
+            logger.info('Validation BCE Coeff: {:.5f} (best)'.format(val_bce))
             logger.info('Validation Dice Coeff: {:.5f} (best)'.format(val_dice))
         else:
+            logger.info('Validation BCE Coeff: {:.5f} (best {:.5f})'.format(val_bce, best_model_info['val_bce']))
             logger.info('Validation Dice Coeff: {:.5f} (best {:.5f})'.format(val_dice, best_model_info['val_dice']))
 
+        writer.add_scalar('detection/epoch/loss/val', args.weight_bce * val_bce + (1. - args.weight_bce) * val_dice, epoch)
+        writer.add_scalar('detection/epoch/bce/val', val_bce, epoch)
+        writer.add_scalar('detection/epoch/dice/val', val_dice, epoch)
+
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'best.pth'))
+
 
 def main():
     parser = ArgumentParser()
@@ -93,10 +114,15 @@ def main():
     parser.add_argument('-l', '--load', dest='load', default=False, help='load file model')
     parser.add_argument('-v', '--val_split', dest='val_split', default=0.8, help='train/val split')
     parser.add_argument('-o', '--output_dir', dest='output_dir', default='/tmp/logs/', help='dir to save log and models')
+    parser.add_argument('-en', '--exp_name', dest='exp_name', default='baseline', help='name of cur experiment')
     args = parser.parse_args()
+    args.output_dir = os.path.join(args.output_dir, args.exp_name)
+
     #
     os.makedirs(args.output_dir, exist_ok=True)
     logger = get_logger(os.path.join(args.output_dir, 'train.log'))
+    writer = SummaryWriter(os.path.join('/tmp/logs/log_dir', args.exp_name))
+
     logger.info('Start training with params:')
     for arg, value in sorted(vars(args).items()):
         logger.info("Argument %s: %r", arg, value)
@@ -112,7 +138,7 @@ def main():
 
     optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     # TODO: loss experimentation, fight class imbalance, there're many ways you can tackle this challenge
-    criterion = lambda x, y: (args.weight_bce * nn.BCELoss()(x, y), (1. - args.weight_bce) * dice_loss(x, y))
+    criterion = lambda x, y: (nn.BCELoss()(x, y), dice_loss(x, y))
     # TODO: you can always try on plateau scheduler as a default option
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=args.lr_gamma) \
         if args.lr_step > 0 else None
@@ -148,8 +174,11 @@ def main():
     logger.info('Number of batches of train/val=%d/%d', len(train_dataloader), len(val_dataloader))
     
     try:
-        train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader, logger=logger, args=args,
-              device=device)
+        train(
+            net, optimizer, criterion, scheduler,
+            train_dataloader, val_dataloader,
+            writer=writer, logger=logger, args=args, device=device,
+        )
     except KeyboardInterrupt:
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'INTERRUPTED.pth'))
         logger.info('Saved interrupt')
