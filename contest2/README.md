@@ -22,3 +22,15 @@ Good luck and have fun!
 
 PS. Some unusual requirements:
  - pip install editdistance
+
+
+# Отчет
+1) Прикрутил Tensorboard
+    - В первую очередь добавил логгирование различных значений
+    loss'ов и lr для batch/epoch в train/val режимах
+        - чтобы лучше видеть пере-/недообучение
+        - надеюсь, что это поможет подобрать lr и параметры для scheduler'а
+    - Для detection разделил loss на BCE и Dice(складываю с весами в самом конце)
+        - думаю, что так будет легче понять, с какими весами их лучше складывать в итоговый loss
+        
+ 
