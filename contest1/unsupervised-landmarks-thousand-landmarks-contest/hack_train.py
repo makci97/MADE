@@ -19,6 +19,7 @@ from hack_utils import NUM_PTS, CROP_SIZE
 from hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys
 from hack_utils import ThousandLandmarksDataset
 from hack_utils import restore_landmarks_batch, create_submission
+from hack_utils import Timer
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -98,52 +99,61 @@ def main(args):
         TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ("image",)),
     ])
 
-    print("Reading data...")
-    train_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'), train_transforms, split="train")
-    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
-                                       shuffle=True, drop_last=True)
-    val_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'), train_transforms, split="val")
-    val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
-                                     shuffle=False, drop_last=False)
+#     print("Reading data...")
+#     with Timer() as t:
+#         train_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'), train_transforms, split="train")
+#         train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=0, pin_memory=True,
+#                                            shuffle=True, drop_last=True)
+#         val_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'train'), train_transforms, split="val")
+#         val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=0, pin_memory=True,
+#                                          shuffle=False, drop_last=False)
+#     print(f'Reading data took {t.interval:.03f} sec.')
 
     print("Creating model...")
-    device = torch.device("cuda: 0") if args.gpu else torch.device("cpu")
-    model = models.resnet18(pretrained=True)
-    model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
-    model.to(device)
+    with Timer() as t:
+        device = torch.device("cuda: 0") if args.gpu else torch.device("cpu")
+        model = models.resnet18(pretrained=True)
+        model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
+        model.to(device)
 
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    loss_fn = fnn.mse_loss
+        optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+        loss_fn = fnn.mse_loss
+    print(f'Creating model took {t.interval:.03f} sec.')
 
-    # 2. train & validate
-    print("Ready for training...")
-    best_val_loss = np.inf
-    for epoch in range(args.epochs):
-        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device)
-        val_loss = validate(model, val_dataloader, loss_fn, device=device)
-        print("Epoch #{:2}:\ttrain loss: {:5.2}\tval loss: {:5.2}".format(epoch, train_loss, val_loss))
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            with open(f"{args.name}_best.pth", "wb") as fp:
-                torch.save(model.state_dict(), fp)
+#     # 2. train & validate
+#     print("Ready for training...")
+#     with Timer() as t:
+#         best_val_loss = np.inf
+#         for epoch in range(args.epochs):
+#             train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device)
+#             val_loss = validate(model, val_dataloader, loss_fn, device=device)
+#             print("Epoch #{:2}:\ttrain loss: {:5.2}\tval loss: {:5.2}".format(epoch, train_loss, val_loss))
+#             if val_loss < best_val_loss:
+#                 best_val_loss = val_loss
+#                 with open(f"{args.name}_best.pth", "wb") as fp:
+#                     torch.save(model.state_dict(), fp)
+#     print(f'Training model took {t.interval:.03f} sec.')
 
     # 3. predict
-    test_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'test'), train_transforms, split="test")
-    test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
-                                      shuffle=False, drop_last=False)
+    with Timer() as t:
+        test_dataset = ThousandLandmarksDataset(os.path.join(args.data, 'test'), train_transforms, split="test")
+        test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=0, pin_memory=True,
+                                          shuffle=False, drop_last=False)
 
-    with open(f"{args.name}_best.pth", "rb") as fp:
-        best_state_dict = torch.load(fp, map_location="cpu")
-        model.load_state_dict(best_state_dict)
+        with open(f"{args.name}_best.pth", "rb") as fp:
+            best_state_dict = torch.load(fp, map_location="cpu")
+            model.load_state_dict(best_state_dict)
 
-    test_predictions = predict(model, test_dataloader, device)
-    with open(f"{args.name}_test_predictions.pkl", "wb") as fp:
-        pickle.dump({"image_names": test_dataset.image_names,
-                     "landmarks": test_predictions}, fp)
+        test_predictions = predict(model, test_dataloader, device)
+        with open(f"{args.name}_test_predictions.pkl", "wb") as fp:
+            pickle.dump({"image_names": test_dataset.image_names,
+                         "landmarks": test_predictions}, fp)
 
-    create_submission(args.data, test_predictions, f"{args.name}_submit.csv")
+        create_submission(args.data, test_predictions, f"{args.name}_submit.csv")
+    print(f'Test prediction took {t.interval:.03f} sec.')
 
 
 if __name__ == '__main__':
     args = parse_arguments()
+    
     sys.exit(main(args))
