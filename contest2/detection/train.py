@@ -67,6 +67,7 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
 
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(net.parameters(), 10.0)
             optimizer.step()
 
         logger.info('Epoch finished! Loss: {:.5f} ({:.5f} | {:.5f})'.format(
@@ -95,7 +96,7 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
         writer.add_scalar('detection/epoch/bce/val', val_bce, epoch)
         writer.add_scalar('detection/epoch/dice/val', val_dice, epoch)
 
-        torch.save(net.state_dict(), os.path.join(args.output_dir, 'best.pth'))
+        torch.save(net.state_dict(), os.path.join(args.output_dir, 'last.pth'))
 
 
 def main():
@@ -121,7 +122,10 @@ def main():
     #
     os.makedirs(args.output_dir, exist_ok=True)
     logger = get_logger(os.path.join(args.output_dir, 'train.log'))
-    writer = SummaryWriter(os.path.join('/tmp/logs/log_dir', args.exp_name))
+
+    root_logs_dir = '/tmp/log_dir/detection/'
+    os.makedirs(root_logs_dir, exist_ok=True)
+    writer = SummaryWriter(os.path.join(root_logs_dir, args.exp_name))
 
     logger.info('Start training with params:')
     for arg, value in sorted(vars(args).items()):

@@ -7,6 +7,7 @@ import tqdm
 from torch import optim
 from torch.nn.functional import ctc_loss, log_softmax
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from torchvision.transforms import Compose
 from transform import Compose, Resize, Pad, Rotate
 from model import RecognitionModel
@@ -44,19 +45,22 @@ def eval(net, data_loader, device):
     
     return acc, avg_ed
 
-def train(net, criterion, optimizer, scheduler, train_dataloader, val_dataloader, args, logger, device):
+
+def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader, writer, args, logger, device):
     # TODO: try different techniques for fighting overfitting of the trained network
+
+    num_batches = len(train_dataloader)
+
     best_acc_val = -1
     for e in range(args.epochs):
         logger.info('Starting epoch {}/{}.'.format(e + 1, args.epochs))
-        
         net.train()
         if scheduler is not None:
             scheduler.step()
             
         loss_mean = []
         train_iter = tqdm.tqdm(train_dataloader)
-        for j, batch in enumerate(train_iter):
+        for i, batch in enumerate(train_iter):
             optimizer.zero_grad()
             images = batch['images'].to(device)
             seqs = batch['seqs']
@@ -69,11 +73,14 @@ def train(net, criterion, optimizer, scheduler, train_dataloader, val_dataloader
             loss = criterion(log_probs, seqs, seq_lens_pred, seq_lens) #/ args.batch_size
             loss.backward()
             loss_mean.append(loss.item())
+            tqdm_iter.set_description('mean loss: {:.4f}'.format(np.mean(loss_mean)))
+            writer.add_scalar('recognition/train/batch/loss', loss_mean[-1], i + epoch * num_batches)
             
             torch.nn.utils.clip_grad_norm_(net.parameters(), 10.0)
             optimizer.step()
             
         logger.info('Epoch finished! Loss: {:.5f}'.format(np.mean(loss_mean)))
+        writer.add_scalar('recognition/epoch/loss/train', np.mean(loss_mean), epoch)
 
         net.eval()
         acc_val, acc_ed_val = eval(net, val_dataloader, device=device)
@@ -85,6 +92,8 @@ def train(net, criterion, optimizer, scheduler, train_dataloader, val_dataloader
         else:
             logger.info('Valid acc: {:.5f}, acc_ed: {:.5f} (best {:.5f})'.format(acc_val, acc_ed_val, best_acc_val))
 
+        writer.add_scalar('recognition/epoch/acc/val', acc_val, epoch)
+        writer.add_scalar('recognition/epoch/acc_ed/val', acc_ed_val, epoch)
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'cp-last.pth'))
     logger.info('Best valid acc: {:.5f}'.format(best_acc_val))
 
@@ -106,10 +115,16 @@ def main():
     parser.add_argument('-v', '--val_split', dest='val_split', default=0.8, help='train/val split')
     parser.add_argument('-o', '--output_dir', dest='output_dir', default='/tmp/logs_rec/',
                         help='dir to save log and models')
+    parser.add_argument('-en', '--exp_name', dest='exp_name', default='baseline', help='name of cur experiment')
     args = parser.parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
 
     logger = get_logger(os.path.join(args.output_dir, 'train.log'))
+
+    root_logs_dir = '/tmp/log_dir/recognition/'
+    os.makedirs(root_logs_dir, exist_ok=True)
+    writer = SummaryWriter(os.path.join(root_logs_dir, args.exp_name))
+
     logger.info('Start training with params:')
     for arg, value in sorted(vars(args).items()):
         logger.info("Argument %s: %r", arg, value)
@@ -156,8 +171,11 @@ def main():
     logger.info('Number of batches of train/val=%d/%d', len(train_dataloader), len(val_dataloader))
 
     try:
-        train(net, criterion, optimizer, scheduler, train_dataloader, val_dataloader, args=args, logger=logger,
-              device=device)
+        train(
+            net, optimizer, criterion, scheduler,
+            train_dataloader, val_dataloader,
+            writer=writer, logger=logger, args=args, device=device,
+        )
     except KeyboardInterrupt:
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'INTERRUPTED.pth'))
         logger.info('Saved interrupt')
