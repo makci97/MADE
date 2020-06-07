@@ -21,7 +21,7 @@ from contest2.segmentation.transform import Compose, Resize, Crop, Pad, Flip
 from contest2.utils import get_logger, dice_coeff, dice_loss, collate_fn
 
 
-def eval_net(net, dataset, device, thresh=0.9):
+def eval_net(net, dataset, device, threshold_score=0.9, threshold_mask=0.05):
     net.eval()
     dice_tot = 0.
     n_masks = 0
@@ -36,8 +36,8 @@ def eval_net(net, dataset, device, thresh=0.9):
                 true_masks = targets[j]['masks']
                 for k, score in enumerate(prediction['scores']):
                     score = float(score.cpu())
-                    if score > thresh:
-                        pred_mask = prediction['masks'][k][0, :, :].cpu().numpy()
+                    if score > threshold_score:
+                        pred_mask = (prediction['masks'][k][0, :, :].cpu().numpy() > threshold_mask).astype(np.uint8)
                         dice_tot += np.max([dice_coeff(pred_mask, true_mask) for true_mask in true_masks[:, None, None]])
                         n_masks += 1
 
@@ -81,7 +81,7 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
         logger.info('Epoch finished! Loss: {:.5f}'.format(epoch_loss / num_batches))
         writer.add_scalar('segmentation/epoch/loss/train', epoch_loss / num_batches, epoch)
 
-        val_dice = eval_net(net, val_dataloader, device=device)
+        val_dice = eval_net(net, val_dataloader, device=device, threshold_score=args.threshold_score, threshold_mask=args.threshold_mask)
         if val_dice > best_model_info['val_dice']:
             best_model_info['val_dice'] = val_dice
             best_model_info['train_loss'] = epoch_loss / num_batches
@@ -107,8 +107,8 @@ def main():
     parser.add_argument('-lrs', '--learning_rate_step', dest='lr_step', default=20, type=int, help='learning rate step')
     parser.add_argument('-lrg', '--learning_rate_gamma', dest='lr_gamma', default=0.5, type=float,
                         help='learning rate gamma')
-    parser.add_argument('-m', '--model', dest='model', default='unet', choices=('unet',))
-    parser.add_argument('-w', '--weight_bce', default=0.5, type=float, help='weight BCE loss')
+    parser.add_argument('-ts', '--threshold_score', dest='threshold_score', default=0.9, type=float, help='threshold score')
+    parser.add_argument('-tm', '--threshold_mask', dest='threshold_mask', default=0.05, type=float, help='threshold mask')
     parser.add_argument('-l', '--load', dest='load', default=False, help='load file model')
     parser.add_argument('-v', '--val_split', dest='val_split', default=0.95, help='train/val split')
     parser.add_argument('-o', '--output_dir', dest='output_dir', default='/tmp/logs/', help='dir to save log and models')
@@ -160,17 +160,17 @@ def main():
     # TODO: don't forget to work class imbalance and data cleansing
 
     train_dataset = SegmentationDataset(
-        args.data_path, os.path.join(args.data_path, 'train_mask.json'),
+        args.data_path, os.path.join(args.data_path, 'train.json'),
         transforms=my_transforms, val_split=args.val_split, is_train=True,
     )
     val_dataset = SegmentationDataset(
-        args.data_path, os.path.join(args.data_path, 'train_mask.json'),
+        args.data_path, os.path.join(args.data_path, 'train.json'),
         transforms=my_transforms, val_split=args.val_split, is_train=False,
     )
 
 
-    # train_dataset.marks = train_dataset.marks[:2]
-    # val_dataset.marks = val_dataset.marks[:2]
+    # train_dataset.marks = train_dataset.marks[:20]
+    # val_dataset.marks = val_dataset.marks[:4]
 
     # TODO: always work with the data: cleaning, sampling
     train_dataloader = DataLoader(
