@@ -6,7 +6,7 @@ from common import abc
 
 
 class RecognitionModel(nn.Module):
-    def __init__(self, dropout=0.3, num_directions=1):
+    def __init__(self, model_name='resnet18', input_size=(64, 320), output_len=24, dropout=0.3, num_directions=1):
         # see workshop #9 for more details
         # (https://github.com/BorisLestsov/MADE/blob/master/seminar9-carocr/9%20-%20crnn%20-%20completed.ipynb)
         super(RecognitionModel, self).__init__()
@@ -14,10 +14,12 @@ class RecognitionModel(nn.Module):
         self.num_classes = len(self.abc)
         self.num_directions = num_directions
 
-        resnet = getattr(models, 'resnet18')(pretrained=True) # TODO: is it most optimal choice ?
+        resnet = getattr(models, model_name)(pretrained=True)  # TODO: is it most optimal choice ?
         self.cnn = nn.Sequential(*list(resnet.children())[:-2])
 
-        self.proj = nn.Conv2d(10, 24, kernel_size=1)
+        h, w = input_size
+        self.pool = nn.AvgPool2d(kernel_size=(h // 32, 1))
+        self.proj = nn.Conv2d(w // 32, output_len, kernel_size=1)
         # TODO: move these parameters to the constructor function in order experiment using factories & configs
         # TODO: try other RNNs or even CNNs, if you've got enough time
         self.rnn = nn.GRU(input_size=512,
@@ -40,6 +42,10 @@ class RecognitionModel(nn.Module):
     def forward(self, x, decode=False):
         hidden = self.init_hidden(x.size(0), next(self.parameters()).device)
         features = self.cnn(x)
+
+        # Pool to make height == 1
+        features = self.pool(features)
+
         sequence = self.features_to_sequence(features)
         sequence, hidden = self.rnn(sequence, hidden)
         sequence = self.linear(sequence)

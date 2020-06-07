@@ -12,16 +12,13 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.nn.functional import ctc_loss, log_softmax
 
 from argparse import ArgumentParser
-from torchvision.transforms import Compose
+from torchvision.transforms import Compose, transforms
 
-from common import abc
-from model import RecognitionModel
-from dataset import RecognitionDataset
-from transform import Compose, Resize, Pad, Rotate
-
-#
-sys.path.insert(0, os.path.abspath((os.path.dirname(__file__)) + '/../'))
-from utils import get_logger
+from contest2.utils import get_logger
+from contest2.recognition.common import abc
+from contest2.recognition.model import RecognitionModel
+from contest2.recognition.dataset import RecognitionDataset
+from contest2.recognition.transform import Compose, Resize, Pad, Rotate
 
 
 def eval(net, data_loader, device):
@@ -58,10 +55,8 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
 
     best_acc_val = -1
     for epoch in range(args.epochs):
-        logger.info('Starting epoch {}/{}.'.format(e + 1, args.epochs))
+        logger.info('Starting epoch {}/{}.'.format(epoch + 1, args.epochs))
         net.train()
-        if scheduler is not None:
-            scheduler.step()
         writer.add_scalar('recognition/lr/epoch', optimizer.state_dict()['param_groups'][0]['lr'], epoch)
             
         loss_mean = []
@@ -79,7 +74,7 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             loss = criterion(log_probs.to(device), seqs.to(device), seq_lens_pred.to(device), seq_lens.to(device)) #/ args.batch_size
 
             loss_mean.append(loss.item())
-            train_iter.set_description('mean loss: {:.4f}'.format(np.mean(loss_mean)))
+            train_iter.set_description('mean loss: {:.4f}'.format(np.mean(loss_mean[-args.lr_step:])))
             writer.add_scalar('recognition/train/batch/loss', loss_mean[-1], i + epoch * num_batches)
 
             writer.add_scalar('recognition/lr/batch', optimizer.state_dict()['param_groups'][0]['lr'], i + epoch * num_batches)
@@ -88,6 +83,9 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             loss.backward()
             torch.nn.utils.clip_grad_norm_(net.parameters(), 10.0)
             optimizer.step()
+
+            if scheduler is not None:
+                scheduler.step(np.mean(loss_mean[-args.lr_step:]))
             
         logger.info('Epoch finished! Loss: {:.5f}'.format(np.mean(loss_mean)))
         writer.add_scalar('recognition/epoch/loss/train', np.mean(loss_mean), epoch)
@@ -104,25 +102,27 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
 
         writer.add_scalar('recognition/epoch/acc/val', acc_val, epoch)
         writer.add_scalar('recognition/epoch/acc_ed/val', acc_ed_val, epoch)
+
+        torch.save(net.state_dict(), os.path.join(args.output_dir, f'epoch_{epoch}.pth'))
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'cp-last.pth'))
     logger.info('Best valid acc: {:.5f}'.format(best_acc_val))
 
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('-d', '--data_path', dest='data_path', type=str, default=None ,help='path to the data')
-    parser.add_argument('--epochs', '-e', dest='epochs', type=int, help='number of train epochs', default=100)
+    parser.add_argument('-d', '--data_path', dest='data_path', type=str, default='../data', help='path to the data')
+    parser.add_argument('--epochs', '-e', dest='epochs', type=int, help='number of train epochs', default=4)
     parser.add_argument('--batch_size', '-b', dest='batch_size', type=int, help='batch size', default=128) # 1o024
-    parser.add_argument('--weight_decay', '-wd', dest='weight_decay', type=float, help='weight_decay', default=5e-4)
-    parser.add_argument('--lr', '-lr', dest='lr', type=float, help='lr', default=1e-4)
-    parser.add_argument('--lr_step', '-lrs', dest='lr_step', type=int, help='lr step', default=None)
-    parser.add_argument('--lr_gamma', '-lrg', dest='lr_gamma', type=float, help='lr gamma factor', default=None)
-    parser.add_argument('--input_wh', '-wh', dest='input_wh', type=str, help='model input size', default='320x32')
+    parser.add_argument('--weight_decay', '-wd', dest='weight_decay', type=float, help='weight_decay', default=1e-5)
+    parser.add_argument('--lr', '-lr', dest='lr', type=float, help='lr', default=3e-4)
+    parser.add_argument('--lr_step', '-lrs', dest='lr_step', type=int, help='lr step', default=250)
+    parser.add_argument('--lr_gamma', '-lrg', dest='lr_gamma', type=float, help='lr gamma factor', default=0.5)
+    parser.add_argument('--input_wh', '-wh', dest='input_wh', type=str, help='model input size', default='320x64')
     parser.add_argument('--rnn_dropout', '-rdo', dest='rnn_dropout', type=float, help='rnn dropout p', default=0.1)
     parser.add_argument('--rnn_num_directions', '-rnd', dest='rnn_num_directions', type=int, help='bi', default=1)
     parser.add_argument('--augs', '-a', dest='augs', type=float, help='degree of geometric augs', default=0)
     parser.add_argument('--load', '-l', dest='load', type=str, help='pretrained weights', default=None)
-    parser.add_argument('-v', '--val_split', dest='val_split', default=0.8, help='train/val split')
+    parser.add_argument('-v', '--val_split', dest='val_split', default=0.95, help='train/val split')
     parser.add_argument('-o', '--output_dir', dest='output_dir', default='/tmp/logs_rec/',
                         help='dir to save log and models')
     parser.add_argument('-en', '--exp_name', dest='exp_name', default='baseline', help='name of cur experiment')
@@ -140,7 +140,11 @@ def main():
         logger.info("Argument %s: %r", arg, value)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    net = RecognitionModel(args.rnn_dropout, args.rnn_num_directions)
+    w, h = list(map(int, args.input_wh.split('x')))
+    net = RecognitionModel(
+        model_name='resnet18', input_size=(h, w), output_len=24,
+        dropout=args.rnn_dropout, num_directions=args.rnn_num_directions,
+    )
     if args.load is not None:
         net.load_state_dict(torch.load(args.load))
     net = net.to(device)
@@ -149,34 +153,40 @@ def main():
     
     # TODO: try other optimizers and schedulers
     optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=args.lr_gamma) \
-        if args.lr_step is not None else None
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, patience=args.lr_step, factor=args.lr_gamma, verbose=True,
+    ) if args.lr_step is not None else None
     
     # dataset
-    w, h = list(map(int, args.input_wh.split('x')))
     # TODO: again, augmentations is the key for many tasks
-    train_transforms = Compose([
-        Rotate(max_angle=args.augs * 7.5, p=0.5),  # 5 -> 7.5
-        Pad(max_size=args.augs / 10, p=0.1),
+    my_ocr_transforms = transforms.Compose([
         Resize(size=(w, h)),
+        transforms.ToTensor()
     ])
-    val_transforms = Resize(size=(w, h))
     # TODO: don't forget to work on data cleansing
-    train_dataset = RecognitionDataset(args.data_path, os.path.join(args.data_path, 'train_rec.json'),
-                                       abc=abc, transforms=train_transforms)
-    val_dataset = RecognitionDataset(args.data_path, None, abc=abc, transforms=val_transforms)
-    # split dataset into train/val, don't try to do this at home ;)
-    train_size = int(len(train_dataset) * args.val_split)
-    val_dataset.image_names = train_dataset.image_names[train_size:]
-    val_dataset.texts = train_dataset.texts[train_size:]
-    train_dataset.image_names = train_dataset.image_names[:train_size]
-    train_dataset.texts = train_dataset.texts[:train_size]
+    train_dataset = RecognitionDataset(
+        args.data_path, os.path.join(args.data_path, 'train_rec.json'),
+        abc=abc, transforms=my_ocr_transforms, val_split=args.val_split, is_train=True,
+    )
+    val_dataset = RecognitionDataset(
+        args.data_path, os.path.join(args.data_path, 'train_rec.json'),
+        abc=abc, transforms=my_ocr_transforms, val_split=args.val_split, is_train=False,
+    )
+
+
+    # train_dataset.marks = train_dataset.marks[:20]
+    # val_dataset.marks = val_dataset.marks[:4]
+
     
     # TODO: maybe implement batch_sampler for tackling imbalance, which is obviously huge in many respects
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8,
-                                  collate_fn=train_dataset.collate_fn)
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8,
-                                collate_fn=val_dataset.collate_fn)
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True,
+        num_workers=8, collate_fn=train_dataset.collate_fn,
+    )
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False,
+        num_workers=8, collate_fn=val_dataset.collate_fn,
+    )
     logger.info('Length of train/val=%d/%d', len(train_dataset), len(val_dataset))
     logger.info('Number of batches of train/val=%d/%d', len(train_dataloader), len(val_dataloader))
 
@@ -190,6 +200,10 @@ def main():
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'INTERRUPTED.pth'))
         logger.info('Saved interrupt')
         sys.exit(0)
+    except:
+        torch.save(net.state_dict(), os.path.join(args.output_dir, 'EXCEPTION.pth'))
+        logger.info('Saved exception')
+        raise
     
 
 if __name__ == '__main__':
