@@ -55,7 +55,7 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
         net.train()
         writer.add_scalar('segmentation/lr/epoch', optimizer.state_dict()['param_groups'][0]['lr'], epoch)
 
-        epoch_loss = 0.
+        epoch_losses = []
         tqdm_iter = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         for i, batch in tqdm_iter:
             images, targets = batch
@@ -65,8 +65,8 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
             loss_dict = net(images, targets)
             losses = sum(loss_dict.values())
 
-            epoch_loss += losses.item()
-            tqdm_iter.set_description('mean loss: {:.4f}'.format(epoch_loss / (i + 1)))
+            epoch_losses.append(losses.item())
+            tqdm_iter.set_description('mean loss: {:.4f}'.format(np.mean(epoch_losses[-args.lr_step:])))
             writer.add_scalar('segmentation/train/batch/loss', losses.item(), i + epoch * num_batches)
 
             writer.add_scalar('segmentation/lr/batch', optimizer.state_dict()['param_groups'][0]['lr'], i + epoch * num_batches)
@@ -77,19 +77,19 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
             optimizer.step()
 
             if scheduler is not None:
-                scheduler.step(epoch_loss / (i + 1))
+                scheduler.step(np.mean(epoch_losses[-args.lr_step:]))
 
             if (i + 1) % 10 == 0:
                 torch.cuda.empty_cache()
                 gc.collect()
 
-        logger.info('Epoch finished! Loss: {:.5f}'.format(epoch_loss / num_batches))
-        writer.add_scalar('segmentation/epoch/loss/train', epoch_loss / num_batches, epoch)
+        logger.info('Epoch finished! Loss: {:.5f}'.format(np.mean(epoch_losses)))
+        writer.add_scalar('segmentation/epoch/loss/train', np.mean(epoch_losses), epoch)
 
         val_dice = eval_net(net, val_dataloader, device=device, threshold_score=args.threshold_score, threshold_mask=args.threshold_mask)
         if val_dice > best_model_info['val_dice']:
             best_model_info['val_dice'] = val_dice
-            best_model_info['train_loss'] = epoch_loss / num_batches
+            best_model_info['train_loss'] = np.mean(epoch_losses)
             best_model_info['epoch'] = epoch
             torch.save(net.state_dict(), os.path.join(args.output_dir, 'CP-best.pth'))
             logger.info('Validation Dice Coeff: {:.5f} (best)'.format(val_dice))
