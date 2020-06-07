@@ -66,12 +66,12 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             seqs = batch['seqs']
             seq_lens = batch['seq_lens']
             
-            seqs_pred = net(images).cpu()
+            seqs_pred = net(images).to(device)
             log_probs = log_softmax(seqs_pred, dim=2)
             seq_lens_pred = torch.Tensor([seqs_pred.size(0)] * seqs_pred.size(1)).int()
 
             # TODO: ctc_loss is not an only choice here
-            loss = criterion(log_probs, seqs, seq_lens_pred, seq_lens) #/ args.batch_size
+            loss = criterion(log_probs.to(device), seqs.to(device), seq_lens_pred.to(device), seq_lens.to(device)) #/ args.batch_size
 
             loss_mean.append(loss.item())
             tqdm_iter.set_description('mean loss: {:.4f}'.format(np.mean(loss_mean)))
