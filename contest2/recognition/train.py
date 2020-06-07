@@ -1,19 +1,24 @@
 import os
 import sys
-from argparse import ArgumentParser
-import numpy as np
-import torch, torch.nn as nn
 import tqdm
+import numpy as np
+import editdistance
+
+import torch
+from torch import nn
 from torch import optim
-from torch.nn.functional import ctc_loss, log_softmax
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.nn.functional import ctc_loss, log_softmax
+
+from argparse import ArgumentParser
 from torchvision.transforms import Compose
-from transform import Compose, Resize, Pad, Rotate
+
+from common import abc
 from model import RecognitionModel
 from dataset import RecognitionDataset
-from common import abc
-import editdistance
+from transform import Compose, Resize, Pad, Rotate
+
 #
 sys.path.insert(0, os.path.abspath((os.path.dirname(__file__)) + '/../'))
 from utils import get_logger
@@ -52,7 +57,7 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
     num_batches = len(train_dataloader)
 
     best_acc_val = -1
-    for e in range(args.epochs):
+    for epoch in range(args.epochs):
         logger.info('Starting epoch {}/{}.'.format(e + 1, args.epochs))
         net.train()
         if scheduler is not None:
@@ -60,7 +65,7 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
         writer.add_scalar('recognition/lr/epoch', optimizer.state_dict()['param_groups'][0]['lr'], epoch)
             
         loss_mean = []
-        train_iter = tqdm.tqdm(train_dataloader)
+        train_iter = tqdm.tqdm(train_dataloader, total=len(train_dataloader))
         for i, batch in enumerate(train_iter):
             images = batch['images'].to(device)
             seqs = batch['seqs']
@@ -74,10 +79,10 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             loss = criterion(log_probs.to(device), seqs.to(device), seq_lens_pred.to(device), seq_lens.to(device)) #/ args.batch_size
 
             loss_mean.append(loss.item())
-            tqdm_iter.set_description('mean loss: {:.4f}'.format(np.mean(loss_mean)))
+            train_iter.set_description('mean loss: {:.4f}'.format(np.mean(loss_mean)))
             writer.add_scalar('recognition/train/batch/loss', loss_mean[-1], i + epoch * num_batches)
 
-            writer.add_scalar('detection/lr/batch', optimizer.state_dict()['param_groups'][0]['lr'], i + epoch * num_batches)
+            writer.add_scalar('recognition/lr/batch', optimizer.state_dict()['param_groups'][0]['lr'], i + epoch * num_batches)
 
             optimizer.zero_grad()
             loss.backward()
