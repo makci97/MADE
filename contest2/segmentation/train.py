@@ -169,8 +169,8 @@ def main():
     )
 
 
-    train_dataset.marks = train_dataset.marks[:2]
-    val_dataset.marks = val_dataset.marks[:2]
+    # train_dataset.marks = train_dataset.marks[:2]
+    # val_dataset.marks = val_dataset.marks[:2]
 
     # TODO: always work with the data: cleaning, sampling
     train_dataloader = DataLoader(
