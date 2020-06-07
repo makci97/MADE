@@ -1,42 +1,69 @@
+import torch
 import os, json
-import cv2
 import numpy as np
+
+from PIL import Image
+from matplotlib.path import Path
 from torch.utils.data import Dataset
 
 
 class SegmentationDataset(Dataset):
 
-    def __init__(self, data_path, config_file=None, transforms=None):
+    def __init__(self, data_path, config_file=None, transforms=None, val_split=0.95, is_train=True):
         super(SegmentationDataset, self).__init__()
         self.data_path = data_path
         self.transforms = transforms
-        self.image_names, self.mask_names = [], []
-        
-        if config_file is not None: # config = None only for the sake of dirty hack in train.py
-            self.image_names, self.mask_names = self._parse_root_(config_file)
 
-    def _parse_root_(self, config_file):
         with open(config_file, 'r') as f:
-            config = json.load(f)
-        image_names, mask_names = [], []
-        for item in config:
-            if 'mask' in item: # handling bad files during transfer
-                image_names.append(item['file'])
-                mask_names.append(item['mask'])
-
-        assert len(image_names) == len(mask_names), 'Images and masks length mismatch'
-        return image_names, mask_names
+            self.marks = json.load(f)
+            if is_train:
+                self.marks = self.marks[:int(len(self.marks) * val_split)]
+            else:
+                self.marks = self.marks[int(len(self.marks) * val_split):]
 
     def __len__(self):
-        return len(self.image_names)
+        return len(self.marks)
 
-    def __getitem__(self, item):
-        image_name = os.path.join(self.data_path, self.image_names[item])
-        mask_name = os.path.join(self.data_path, self.mask_names[item])
+    def __getitem__(self, idx):
+        item = self.marks[idx]
+        img_path = os.path.join(self.data_path, item["file"])
+        img = Image.open(img_path).convert('RGB')
+        w, h = img.size
 
-        image = cv2.imread(image_name).astype(np.float32) / 255.
-        mask = cv2.imread(mask_name, cv2.IMREAD_GRAYSCALE).astype(np.float32) / 255.
+        box_coords = item['nums']
+        boxes = []
+        labels = []
+        masks = []
+        for box in box_coords:
+            points = np.array(box['box'])
+            x0, y0 = np.min(points[:, 0]), np.min(points[:, 1])
+            x2, y2 = np.max(points[:, 0]), np.max(points[:, 1])
+            boxes.append([x0, y0, x2, y2])
+            labels.append(1)
+
+            # Здесь мы наши 4 точки превращаем в маску
+            # Это нужно, чтобы кроме bounding box предсказывать и, соответственно, маску :)
+            nx, ny = w, h
+            poly_verts = points
+            x, y = np.meshgrid(np.arange(nx), np.arange(ny))
+            x, y = x.flatten(), y.flatten()
+            points = np.vstack((x, y)).T
+            path = Path(poly_verts)
+            grid = path.contains_points(points)
+            grid = grid.reshape((ny, nx)).astype(int)
+            masks.append(grid)
+
+        boxes = torch.as_tensor(boxes)
+        labels = torch.as_tensor(labels)
+        masks = torch.as_tensor(masks)
+
+        target = {
+            'boxes': boxes,
+            'labels': labels,
+            'masks': masks,
+        }
 
         if self.transforms is not None:
-            image, mask = self.transforms(image, mask)
-        return image.transpose(2, 0, 1), mask
+            img = self.transforms(img)
+
+        return img, target

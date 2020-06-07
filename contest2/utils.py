@@ -103,3 +103,7 @@ def get_boxes_from_mask(mask, margin, clip=False):
     if clip:
         boxes = boxes.clip(0.0, 1.0)
     return boxes
+
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
