@@ -199,6 +199,10 @@ def main():
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'INTERRUPTED.pth'))
         logger.info('Saved interrupt')
         sys.exit(0)
+    except:
+        torch.save(net.state_dict(), os.path.join(args.output_dir, 'EXCEPTION.pth'))
+        logger.info('Saved exception')
+        sys.exit(1)
 
 
 if __name__ == '__main__':
