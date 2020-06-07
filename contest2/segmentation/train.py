@@ -1,3 +1,4 @@
+import gc
 import os
 import sys
 import tqdm
@@ -77,6 +78,10 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
 
             if scheduler is not None:
                 scheduler.step(epoch_loss / (i + 1))
+
+            if (i + 1) % 10 == 0:
+                torch.cuda.empty_cache()
+                gc.collect()
 
         logger.info('Epoch finished! Loss: {:.5f}'.format(epoch_loss / num_batches))
         writer.add_scalar('segmentation/epoch/loss/train', epoch_loss / num_batches, epoch)
