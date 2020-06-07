@@ -75,7 +75,7 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
             torch.nn.utils.clip_grad_norm_(net.parameters(), 10.0)
             optimizer.step()
 
-            if scheduler is not None and (i + 1) % 20 == 0:
+            if scheduler is not None:
                 scheduler.step(epoch_loss / (i + 1))
 
         logger.info('Epoch finished! Loss: {:.5f}'.format(epoch_loss / num_batches))
@@ -99,12 +99,12 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
 def main():
     parser = ArgumentParser()
     parser.add_argument('-d', '--data_path', dest='data_path', type=str, default='../data', help='path to the data')
-    parser.add_argument('-e', '--epochs', dest='epochs', default=2, type=int, help='number of epochs')
-    parser.add_argument('-b', '--batch_size', dest='batch_size', default=2, type=int, help='batch size')
+    parser.add_argument('-e', '--epochs', dest='epochs', default=4, type=int, help='number of epochs')
+    parser.add_argument('-b', '--batch_size', dest='batch_size', default=15, type=int, help='batch size')
     parser.add_argument('-s', '--image_size', dest='image_size', default=256, type=int, help='input image size')
     parser.add_argument('-lr', '--learning_rate', dest='lr', default=3e-4, type=float, help='learning rate')
     parser.add_argument('-wd', '--weight_decay', dest='weight_decay', default=5e-4, type=float, help='weight decay')
-    parser.add_argument('-lrs', '--learning_rate_step', dest='lr_step', default=20, type=int, help='learning rate step')
+    parser.add_argument('-lrs', '--learning_rate_step', dest='lr_step', default=250, type=int, help='learning rate step')
     parser.add_argument('-lrg', '--learning_rate_gamma', dest='lr_gamma', default=0.5, type=float,
                         help='learning rate gamma')
     parser.add_argument('-ts', '--threshold_score', dest='threshold_score', default=0.9, type=float, help='threshold score')
