@@ -38,7 +38,7 @@ def eval_net(net, dataset, device, threshold_score=0.9, threshold_mask=0.05):
                 for k, score in enumerate(prediction['scores']):
                     score = float(score.cpu())
                     if score > threshold_score:
-                        pred_mask = (prediction['masks'][k][0, :, :].cpu().numpy() > threshold_mask).astype(np.uint8)
+                        pred_mask = (prediction['masks'][k][0, :, :] > threshold_mask).int()
                         dice_tot += np.max([dice_coeff(pred_mask, true_mask) for true_mask in true_masks[:, None, None]])
                         n_masks += 1
 
@@ -98,6 +98,7 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
 
         writer.add_scalar('segmentation/epoch/dice/val', val_dice, epoch)
 
+        torch.save(net.state_dict(), os.path.join(args.output_dir, f'epoch_{epoch}.pth'))
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'last.pth'))
 
 
@@ -202,7 +203,7 @@ def main():
     except:
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'EXCEPTION.pth'))
         logger.info('Saved exception')
-        sys.exit(1)
+        raise
 
 
 if __name__ == '__main__':
