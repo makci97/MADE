@@ -1,18 +1,21 @@
 import os
 import sys
-from argparse import ArgumentParser
-
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import tqdm
-from dataset import DetectionDataset
-from unet import UNet
+import numpy as np
+
+import torch
+from torch import nn
 from torch import optim
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+
+from argparse import ArgumentParser
+
+from unet import UNet
+from dataset import SegmentationDataset
 from transform import Compose, Resize, Crop, Pad, Flip
+
 # the proper way to do this is relative import, one more nested package and main.py outside the package
 # will sort this out
 sys.path.insert(0, os.path.abspath((os.path.dirname(__file__)) + '/../'))
@@ -45,7 +48,7 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
         net.train()
         if scheduler is not None:
             scheduler.step(epoch)
-        writer.add_scalar('detection/lr/epoch', optimizer.state_dict()['param_groups'][0]['lr'], epoch)
+        writer.add_scalar('segmentation/lr/epoch', optimizer.state_dict()['param_groups'][0]['lr'], epoch)
 
         epoch_loss = 0.
         tqdm_iter = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))
@@ -62,11 +65,11 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             mean_dice.append(dice_val.item())
             epoch_loss += loss.item()
             tqdm_iter.set_description('mean loss: {:.4f}'.format(epoch_loss / (i + 1)))
-            writer.add_scalar('detection/train/batch/loss', loss.item(), i + epoch * num_batches)
-            writer.add_scalar('detection/train/batch/bce', mean_bce[-1], i + epoch * num_batches)
-            writer.add_scalar('detection/train/batch/dice', mean_dice[-1], i + epoch * num_batches)
+            writer.add_scalar('segmentation/train/batch/loss', loss.item(), i + epoch * num_batches)
+            writer.add_scalar('segmentation/train/batch/bce', mean_bce[-1], i + epoch * num_batches)
+            writer.add_scalar('segmentation/train/batch/dice', mean_dice[-1], i + epoch * num_batches)
 
-            writer.add_scalar('detection/lr/batch', optimizer.state_dict()['param_groups'][0]['lr'], i + epoch * num_batches)
+            writer.add_scalar('segmentation/lr/batch', optimizer.state_dict()['param_groups'][0]['lr'], i + epoch * num_batches)
 
             optimizer.zero_grad()
             loss.backward()
@@ -78,9 +81,9 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             np.mean(mean_bce),
             np.mean(mean_dice),
         ))
-        writer.add_scalar('detection/epoch/loss/train', epoch_loss / num_batches, epoch)
-        writer.add_scalar('detection/epoch/bce/train', np.mean(mean_bce), epoch)
-        writer.add_scalar('detection/epoch/dice/train', np.mean(mean_dice), epoch)
+        writer.add_scalar('segmentation/epoch/loss/train', epoch_loss / num_batches, epoch)
+        writer.add_scalar('segmentation/epoch/bce/train', np.mean(mean_bce), epoch)
+        writer.add_scalar('segmentation/epoch/dice/train', np.mean(mean_dice), epoch)
 
         val_bce, val_dice = eval_net(net, val_dataloader, device=device)
         if val_dice > best_model_info['val_dice']:
@@ -95,9 +98,9 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
             logger.info('Validation BCE Coeff: {:.5f} (best {:.5f})'.format(val_bce, best_model_info['val_bce']))
             logger.info('Validation Dice Coeff: {:.5f} (best {:.5f})'.format(val_dice, best_model_info['val_dice']))
 
-        writer.add_scalar('detection/epoch/loss/val', args.weight_bce * val_bce + (1. - args.weight_bce) * val_dice, epoch)
-        writer.add_scalar('detection/epoch/bce/val', val_bce, epoch)
-        writer.add_scalar('detection/epoch/dice/val', val_dice, epoch)
+        writer.add_scalar('segmentation/epoch/loss/val', args.weight_bce * val_bce + (1. - args.weight_bce) * val_dice, epoch)
+        writer.add_scalar('segmentation/epoch/bce/val', val_bce, epoch)
+        writer.add_scalar('segmentation/epoch/dice/val', val_dice, epoch)
 
         torch.save(net.state_dict(), os.path.join(args.output_dir, 'last.pth'))
 
@@ -126,7 +129,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     logger = get_logger(os.path.join(args.output_dir, 'train.log'))
 
-    root_logs_dir = '/tmp/log_dir/detection/'
+    root_logs_dir = '/tmp/log_dir/segmentation/'
     os.makedirs(root_logs_dir, exist_ok=True)
     writer = SummaryWriter(os.path.join(root_logs_dir, args.exp_name))
 
@@ -161,9 +164,9 @@ def main():
     # TODO: don't forget to work class imbalance and data cleansing
     val_transforms = Resize(size=(args.image_size, args.image_size))
     
-    train_dataset = DetectionDataset(args.data_path, os.path.join(args.data_path, 'train_mask.json'),
+    train_dataset = SegmentationDataset(args.data_path, os.path.join(args.data_path, 'train_mask.json'),
                                      transforms=train_transforms)
-    val_dataset = DetectionDataset(args.data_path, None, transforms=val_transforms)
+    val_dataset = SegmentationDataset(args.data_path, None, transforms=val_transforms)
 
     # split dataset into train/val, don't try to do this at home ;)
     train_size = int(len(train_dataset) * args.val_split)

@@ -2,7 +2,7 @@ import os, sys, cv2, numpy as np
 import torch, torchvision
 from argparse import ArgumentParser
 from recognition.model import RecognitionModel
-from detection.unet import UNet
+from segmentation.unet import UNet
 from utils import prepare_for_inference, get_boxes_from_mask
 
 
@@ -52,7 +52,7 @@ def main():
             img, k, dw, dh = prepare_for_inference(image_src.astype(np.float) / 255., (256, 256)) # TODO: obtain sizes from torch.load
             input = torch.from_numpy(img.transpose(2, 0, 1)).float().unsqueeze(0)
             
-            #detection through segmentation
+            #segmentation through segmentation
             # TODO: to try test time augmentations
             pred = torch.sigmoid(seg_model(input.to(device))).squeeze().cpu().numpy()
             # TODO: other possible solution is to try detection and segmentation simultaneously

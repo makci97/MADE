@@ -4,10 +4,10 @@ import numpy as np
 from torch.utils.data import Dataset
 
 
-class DetectionDataset(Dataset):
+class SegmentationDataset(Dataset):
 
     def __init__(self, data_path, config_file=None, transforms=None):
-        super(DetectionDataset, self).__init__()
+        super(SegmentationDataset, self).__init__()
         self.data_path = data_path
         self.transforms = transforms
         self.image_names, self.mask_names = [], []

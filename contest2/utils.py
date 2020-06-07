@@ -65,7 +65,7 @@ def prepare_for_inference(image, fit_size):
     Scale proportionally image into fit_size and pad with zeroes to fit_size
     :return: np.ndarray image_padded shaped (*fit_size, 3), float k (scaling coef), float dw (x pad), dh (y pad)
     """
-    # pretty much the same code as detection.transforms.Resize
+    # pretty much the same code as segmentation.transforms.Resize
     h, w = image.shape[:2]
     k = fit_size[0] / max(w, h)
     image_fitted = cv2.resize(image, dsize=None, fx=k, fy=k)
