@@ -117,7 +117,7 @@ def main():
     parser.add_argument('-tm', '--threshold_mask', dest='threshold_mask', default=0.05, type=float, help='threshold mask')
     parser.add_argument('-l', '--load', dest='load', default=False, help='load file model')
     parser.add_argument('-v', '--val_split', dest='val_split', default=0.95, help='train/val split')
-    parser.add_argument('-o', '--output_dir', dest='output_dir', default='/tmp/logs/', help='dir to save log and models')
+    parser.add_argument('-o', '--output_dir', dest='output_dir', default='logs_seg/', help='dir to save log and models')
     parser.add_argument('-en', '--exp_name', dest='exp_name', default='baseline', help='name of cur experiment')
     args = parser.parse_args()
     args.output_dir = os.path.join(args.output_dir, args.exp_name)
@@ -126,7 +126,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     logger = get_logger(os.path.join(args.output_dir, 'train.log'))
 
-    root_logs_dir = '/tmp/log_dir/segmentation/'
+    root_logs_dir = 'log_dir/segmentation/'
     os.makedirs(root_logs_dir, exist_ok=True)
     writer = SummaryWriter(os.path.join(root_logs_dir, args.exp_name))
 

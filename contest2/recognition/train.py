@@ -123,7 +123,7 @@ def main():
     parser.add_argument('--augs', '-a', dest='augs', type=float, help='degree of geometric augs', default=0)
     parser.add_argument('--load', '-l', dest='load', type=str, help='pretrained weights', default=None)
     parser.add_argument('-v', '--val_split', dest='val_split', default=0.95, help='train/val split')
-    parser.add_argument('-o', '--output_dir', dest='output_dir', default='/tmp/logs_rec/',
+    parser.add_argument('-o', '--output_dir', dest='output_dir', default='logs_rec/',
                         help='dir to save log and models')
     parser.add_argument('-en', '--exp_name', dest='exp_name', default='baseline', help='name of cur experiment')
     args = parser.parse_args()
@@ -131,7 +131,7 @@ def main():
 
     logger = get_logger(os.path.join(args.output_dir, 'train.log'))
 
-    root_logs_dir = '/tmp/log_dir/recognition/'
+    root_logs_dir = 'log_dir/recognition/'
     os.makedirs(root_logs_dir, exist_ok=True)
     writer = SummaryWriter(os.path.join(root_logs_dir, args.exp_name))
 
