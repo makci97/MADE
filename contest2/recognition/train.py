@@ -95,7 +95,12 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
 
         if acc_val > best_acc_val:
             best_acc_val = acc_val
-            torch.save(net.state_dict(), os.path.join(args.output_dir, 'cp-best.pth'))
+            torch.save({
+                    'model_state_dict': net.state_dict(),
+                    'model_config': net.model_config,
+                },
+                os.path.join(args.output_dir, 'cp-best.pth'),
+            )
             logger.info('Valid acc: {:.5f}, acc_ed: {:.5f} (best)'.format(acc_val, acc_ed_val))
         else:
             logger.info('Valid acc: {:.5f}, acc_ed: {:.5f} (best {:.5f})'.format(acc_val, acc_ed_val, best_acc_val))
@@ -103,8 +108,18 @@ def train(net, optimizer, criterion, scheduler, train_dataloader, val_dataloader
         writer.add_scalar('recognition/epoch/acc/val', acc_val, epoch)
         writer.add_scalar('recognition/epoch/acc_ed/val', acc_ed_val, epoch)
 
-        torch.save(net.state_dict(), os.path.join(args.output_dir, f'epoch_{epoch}.pth'))
-        torch.save(net.state_dict(), os.path.join(args.output_dir, 'cp-last.pth'))
+        torch.save({
+                    'model_state_dict': net.state_dict(),
+                    'model_config': net.model_config,
+                },
+            os.path.join(args.output_dir, f'epoch_{epoch}.pth'),
+        )
+        torch.save({
+                    'model_state_dict': net.state_dict(),
+                    'model_config': net.model_config,
+                },
+            os.path.join(args.output_dir, 'cp-last.pth'),
+        )
     logger.info('Best valid acc: {:.5f}'.format(best_acc_val))
 
 

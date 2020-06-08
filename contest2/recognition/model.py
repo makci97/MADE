@@ -10,6 +10,14 @@ class RecognitionModel(nn.Module):
         # see workshop #9 for more details
         # (https://github.com/BorisLestsov/MADE/blob/master/seminar9-carocr/9%20-%20crnn%20-%20completed.ipynb)
         super(RecognitionModel, self).__init__()
+        self.model_config = dict(
+            model_name=model_name,
+            input_size=input_size,
+            output_len=output_len,
+            dropout=dropout,
+            num_directions=num_directions,
+        )
+
         self.abc = abc
         self.num_classes = len(self.abc)
         self.num_directions = num_directions
