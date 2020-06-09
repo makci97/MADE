@@ -143,6 +143,7 @@ def main():
                         help='dir to save log and models')
     parser.add_argument('-en', '--exp_name', dest='exp_name', default='baseline', help='name of cur experiment')
     args = parser.parse_args()
+    args.output_dir = os.path.join(args.output_dir, args.exp_name)
     os.makedirs(args.output_dir, exist_ok=True)
 
     logger = get_logger(os.path.join(args.output_dir, 'train.log'))
