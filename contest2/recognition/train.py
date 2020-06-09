@@ -132,6 +132,7 @@ def main():
     parser.add_argument('--lr', '-lr', dest='lr', type=float, help='lr', default=3e-4)
     parser.add_argument('--lr_step', '-lrs', dest='lr_step', type=int, help='lr step', default=250)
     parser.add_argument('--lr_gamma', '-lrg', dest='lr_gamma', type=float, help='lr gamma factor', default=0.5)
+    parser.add_argument('--backbone', '-bb', dest='backbone', type=str, help='backbone model name', default='resnet18')
     parser.add_argument('--input_wh', '-wh', dest='input_wh', type=str, help='model input size', default='320x64')
     parser.add_argument('--rnn_dropout', '-rdo', dest='rnn_dropout', type=float, help='rnn dropout p', default=0.1)
     parser.add_argument('--rnn_num_directions', '-rnd', dest='rnn_num_directions', type=int, help='bi', default=1)
@@ -157,7 +158,7 @@ def main():
 
     w, h = list(map(int, args.input_wh.split('x')))
     net = RecognitionModel(
-        model_name='resnet18', input_size=(h, w), output_len=24,
+        model_name=args.backbone, input_size=(h, w), output_len=24,
         dropout=args.rnn_dropout, num_directions=args.rnn_num_directions,
     )
     if args.load is not None:
