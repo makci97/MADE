@@ -21,7 +21,7 @@ class RecognitionDataset(Dataset):
             if is_train:
                 self.marks = self.marks[:int(len(self.marks) * val_split)]
             else:
-                self.marks = self.marks[int(len(self.marks) * val_split):]
+                self.marks = self.marks[int(len(self.marks) * val_split):-2]
 
         final_marks = []
         for elem in self.marks:
