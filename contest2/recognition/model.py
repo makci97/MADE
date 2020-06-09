@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from torch import nn
 from torchvision import models
-from common import abc
+from contest2.recognition.common import abc
 
 
 class RecognitionModel(nn.Module):
