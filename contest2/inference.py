@@ -33,6 +33,7 @@ def main():
                         help='dir to save log and models')
     args = parser.parse_args()
     print('Start inference')
+    os.makedirs(args.output_dir, exist_ok=True)
 
     cur_dir = os.path.dirname(__file__)
     seg_model_path = args.seg_model or os.path.join(cur_dir, 'pretrained', 'seg_unet_20epoch_basic.pth')
@@ -59,7 +60,7 @@ def main():
     results = []
     with torch.no_grad():
         files = os.listdir(test_dir_path)
-        for i, file_name in tqdm(enumerate(files)):
+        for i, file_name in tqdm(enumerate(files), total=len(files)):
             img_path = os.path.join(test_dir_path, file_name)
             img = Image.open(img_path).convert('RGB')
             img_cv = cv2.imread(img_path)
@@ -112,8 +113,6 @@ def main():
             # all predictions must be sorted by x1
             texts.sort(key=lambda x: x[0])
             results.append((file_name, [w[1] for w in texts]))
-            if i % 100 == 0:
-                print(i, len(files))
             
     # Generate a submission file
     with open(os.path.join(args.output_dir, 'submission.csv'), 'w') as wf:
