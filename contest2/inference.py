@@ -60,7 +60,9 @@ def main():
     with torch.no_grad():
         files = os.listdir(test_dir_path)
         for i, file_name in tqdm(enumerate(files)):
-            img = Image.open(os.path.join(test_dir_path, file_name)).convert('RGB')
+            img_path = os.path.join(test_dir_path, file_name)
+            img = Image.open(img_path).convert('RGB')
+            img_cv = cv2.imread(img_path)
             img_tensor = seg_transforms(img)
 
             prediction = seg_model([img_tensor.to(device)])[0]
@@ -90,12 +92,12 @@ def main():
 
                     points = [[x0, y0], [x2, y2], [x1, y1], [x3, y3]]
 
-                    img_bbox = resizer(img[y_min:y_max, x_min:x_max])
+                    img_bbox = resizer(img_cv[y_min:y_max, x_min:x_max])
                     img_bbox = seg_transforms(img_bbox)
                     img_bbox = img_bbox.unsqueeze(0)
 
                     points = np.clip(np.array(points), 0, None)
-                    img_polygon = resizer(four_point_transform(img, points))
+                    img_polygon = resizer(four_point_transform(img_cv, points))
                     img_polygon = seg_transforms(img_polygon)
                     img_polygon = img_polygon.unsqueeze(0)
 
