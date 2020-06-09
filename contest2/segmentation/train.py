@@ -50,7 +50,7 @@ def train(net, optimizer, scheduler, train_dataloader, val_dataloader, logger, w
 
     best_model_info = {'epoch': -1, 'val_bce': np.inf, 'val_dice': 0., 'train_dice': 0., 'train_loss': 0.}
 
-    for epoch in range(args.epochs):
+    for epoch in range(args.start_epoch, args.epochs):
         logger.info('Starting epoch {}/{}.'.format(epoch + 1, args.epochs))
         net.train()
         writer.add_scalar('segmentation/lr/epoch', optimizer.state_dict()['param_groups'][0]['lr'], epoch)
@@ -106,6 +106,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('-d', '--data_path', dest='data_path', type=str, default='../data', help='path to the data')
     parser.add_argument('-e', '--epochs', dest='epochs', default=4, type=int, help='number of epochs')
+    parser.add_argument('-se', '--start_epoch', dest='start_epoch', default=0, type=int, help='number of first epoch')
     parser.add_argument('-b', '--batch_size', dest='batch_size', default=15, type=int, help='batch size')
     parser.add_argument('-s', '--image_size', dest='image_size', default=256, type=int, help='input image size')
     parser.add_argument('-lr', '--learning_rate', dest='lr', default=3e-4, type=float, help='learning rate')
